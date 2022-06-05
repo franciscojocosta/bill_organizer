@@ -16,7 +16,6 @@ SMTP_PORT   = 993
 3 - Logout à conta
 2 - Adicionar Segurança à Password
 1 - Limpar Código e Comentar
-
 '''
 class Save_Inv():
     
