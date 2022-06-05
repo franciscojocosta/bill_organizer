@@ -1,7 +1,6 @@
 import imaplib
 import email
 import os
-import time
 
 ORG_EMAIL   = "@gmail.com"
 FROM_EMAIL  = "franciscojocosta" + ORG_EMAIL
