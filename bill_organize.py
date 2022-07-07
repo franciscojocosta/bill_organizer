@@ -8,12 +8,14 @@ FROM_PWD    = "K5i2EUH2"
 SMTP_SERVER = "imap.gmail.com"
 SMTP_PORT   = 993
 '''
+Melhorar Git
 
 6 - Funcionar automático
 5 - Criar base links para file folders
 4 - Adicionar função se folder não existir criar
 3 - Logout à conta
 2 - Adicionar Segurança à Password
+1.2 - Adicionar exceptions e bug-proofing
 1 - Limpar Código e Comentar
 '''
 class Save_Inv():
@@ -21,10 +23,9 @@ class Save_Inv():
     def __init__(self) -> None:
         print ("Init")
         
-        
     def start(self,rem):
         self.mail = self.connect()
-        self.save_att(rem)
+        self.get_att(rem)
     def connect(self):
         mail = imaplib.IMAP4_SSL(SMTP_SERVER)
         mail.login(FROM_EMAIL,FROM_PWD)
@@ -32,7 +33,7 @@ class Save_Inv():
         """trow exeption if error connecting"""
         return mail
 
-    def save_att(self,rem):
+    def get_att(self,rem):
 
         search_string = '(FROM '+rem+')'
 
@@ -57,10 +58,13 @@ class Save_Inv():
             fileName = part.get_filename()
             filefolder = rem.split("@",1)[0]
             print(filefolder)
+
             if "edp" not in filefolder and "agua" not in filefolder:
                 filefolder = 'default'
+
             if bool(fileName):
                 filePath = os.path.join("C:\\Users\\franc\\Desktop\\Connect_to_Gmail",filefolder, fileName)
+
             if not os.path.isfile(filePath):  
                 print(fileName)
 
