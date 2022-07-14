@@ -56,7 +56,7 @@ def edp():
     lim_date = text[lim_date_ix : lim_date_ix + lim_date_size]
     lim_date = lim_date[6:] + "-" + lim_date[3:5] + "-" + lim_date[:2]
     print (lim_date, " -> ", type(lim_date))
-    bills = ('EDP','1232432442', float(price), per, int(ent), int(ref), lim_date)
+    bills = ('EDP','1232432942', float(price), per, int(ent), int(ref), lim_date)
     return bills
 
 def agua():
@@ -125,7 +125,7 @@ def agua():
 
     bills = ('Agua','1985.AR.DP.141823513', float(price), per, int(ent), int(ref), lim_date)
     return bills
-record = agua()
+record = edp()
 
 
 mydb = mysql.connector.connect(
@@ -136,14 +136,20 @@ mydb = mysql.connector.connect(
 )
 
 mycursor = mydb.cursor()
-mycursor.execute("SHOW columns FROM bills")
 
-for column in mycursor.fetchall():
-    print(column[0])
+
 val = '122312'
 query = "INSERT INTO bills (tipo,id_fatura,price,periodo_fatura,entidade,referencia,data_limite ) VALUES (%s,%s,%s,%s,%s,%s,%s)"
-mycursor.execute(query,record)
+check_fatura_q = """Select COUNT(*) from bills where id_fatura = %s""" %record[1]
+mycursor.execute (check_fatura_q)
 
+fatura_entrys = int(mycursor.fetchone()[0])
+
+if fatura_entrys < 1:
+    mycursor.execute(query,record)
+
+else:
+    print ("Already a bill with this id")
 
 for x in mycursor:
   print(x)
