@@ -1,5 +1,4 @@
 
-import pandas as pd
 import PyPDF2
 import mysql.connector
 import os
@@ -8,25 +7,32 @@ from pickle import TRUE
 import time
 from watchdog.observers import Observer
 from watchdog.events import FileSystemEventHandler
+import logging
+ 
+logging.basicConfig(filename='log.log',
+                    filemode='a',
+                    format='%(asctime)s,%(msecs)d %(name)s %(levelname)s %(message)s',
+                    datefmt='%H:%M:%S',
+                    level=logging.DEBUG)
 
 record = (0,0) ## Variable to store bill data
 src_path = 'C:\\Users\\franc\\Downloads'  #### Path to check for bills
 
 class MonitorFolder(FileSystemEventHandler):
-    
+    ## When downloading bills, observer gets multiple entrys of filename, filename_aux variable validates if filename already processed.
     filename_aux = ""
 
     def edpmatch(self,filename):
-
-        if len(filename) < 12:  ### EDP bill names has 12 integers
+        ### EDP bill names has 12 integers at the begging
+        if len(filename) < 12:  
             return False
 
         for i in range(12):
-            if filename[i].isnumeric() == False: ## Check if all digits numeric
+            if filename[i].isnumeric() == False: 
                 break
             
             if i == 11 and self.filename_aux != filename:  
-            ## When downloading bills observer gets multiple entrys of filename, the aux variable validates if filename already processed.
+                
                 if len(filename) < 22 and ".pdf" in filename: 
                     self.filename_aux = filename
                     return True
@@ -34,24 +40,15 @@ class MonitorFolder(FileSystemEventHandler):
     def aguamatch(self,filename):
         
         if "985.AR.DP." in filename and filename != self.filename_aux:
-        ## When downloading bills observer gets multiple entrys of filename, the aux variable validates if filename already processed.
             self.filename_aux = filename
             return TRUE
 
     def get_agua(self, filename,filepath): 
-
-        print (filename)
-            ####
-            # LOG filename is being processed
-            ####
+        logging.info('Bill: %s is being processed', filename)
         bill_handler('agua',filepath)
 
     def get_edp(self, filename,filepath): 
-
-        print (filename)
-            ####
-                # LOG filename is being processed
-                    ####
+        logging.info('Bill: %s is being processed', filename)
         bill_handler('EDP',filepath)
 
     def on_modified(self, event):
@@ -74,10 +71,9 @@ class bill_handler():
         try:
             pdfFileObj = open(filepath, 'rb')
         except OSError:
-            ###
-            # LOG Error opening bill
-            ###
+            logging.error('Cannot open bill file')
             sys.exit()
+
         with pdfFileObj:
             pdfReader = PyPDF2.PdfFileReader(pdfFileObj)
             text=''
@@ -137,9 +133,7 @@ class bill_handler():
         try:
             pdfFileObj = open(filepath, 'rb')
         except OSError:
-            ###
-            # LOG Error opening bill
-            ###
+            logging.error('Cannot open bill file')
             sys.exit()
         with pdfFileObj:
             pdfReader = PyPDF2.PdfFileReader(pdfFileObj)
@@ -216,7 +210,7 @@ class bill_handler():
                 )
 
         except mysql.connector.Error as err:
-            print("Something went wrong: {}".format(err))
+            logging.error('Cant connect to DB : %s', err)
         ###
 
         if tipo == 'EDP':
@@ -235,30 +229,20 @@ class bill_handler():
             mycursor.execute(check_fatura_q)
             fatura_entrys = int(mycursor.fetchone()[0])
         except:
-            ###
-            # Log Error
-            ###
+            logging.error('Error on check fatura query')
             pass
         
         if fatura_entrys < 1: ## 
             try:
                 mycursor.execute(query,record)
             except:
-                ###
-                # Log error
-                ###
+                logging.error('Error on fatura query')
                 pass
+            logging.info('Bill stored %s', record)
 
-            ###
-            # Storing values to DB (log all values)
-            ###
         else:
-            print ("Already a bill with this id")
-            ###
-            # Log BIll already in DB
-            ###
+            logging.warning('Already a bill with this id.')
 
-        
         mydb.commit()
         mycursor.close()
 
@@ -272,10 +256,9 @@ if __name__ == "__main__":
     observer = Observer()
     observer.schedule(event_handler, path=src_path, recursive=True)
     observer.start()
-    #####
-# Log Monitoring Started
-    #####
-
+    
+    logging.info('Monitoring Started')
+    
     try:
         while(True):
            time.sleep(1)
