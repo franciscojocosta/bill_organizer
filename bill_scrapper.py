@@ -1,14 +1,15 @@
-from doctest import FAIL_FAST
-import faulthandler
+
+import pandas as pd
 import PyPDF2
 import mysql.connector
 import os
-from pickle import TRUE
 import sys
+from pickle import TRUE
 import time
 from watchdog.observers import Observer
 from watchdog.events import FileSystemEventHandler
-record = (0,0)
+
+record = (0,0) ## Variable to store bill data
 src_path = 'C:\\Users\\franc\\Downloads'  #### Path to check for bills
 
 class MonitorFolder(FileSystemEventHandler):
@@ -31,12 +32,14 @@ class MonitorFolder(FileSystemEventHandler):
                     return True
                
     def aguamatch(self,filename):
+        
         if "985.AR.DP." in filename and filename != self.filename_aux:
         ## When downloading bills observer gets multiple entrys of filename, the aux variable validates if filename already processed.
             self.filename_aux = filename
             return TRUE
 
     def get_agua(self, filename,filepath): 
+
         print (filename)
             ####
             # LOG filename is being processed
@@ -44,6 +47,7 @@ class MonitorFolder(FileSystemEventHandler):
         bill_handler('agua',filepath)
 
     def get_edp(self, filename,filepath): 
+
         print (filename)
             ####
                 # LOG filename is being processed
@@ -66,16 +70,19 @@ class bill_handler():
     def edp(self,filepath):
 
         filename = os.path.basename(filepath) # Get filename from filepath
-        
-        pdfFileObj = open(filepath, 'rb')
-        pdfReader = PyPDF2.PdfFileReader(pdfFileObj)
-        text=''
-        '''
-        -> Deal with exception of opening the file
-        '''
-        pageObj = pdfReader.getPage(pdfReader.numPages - 1) ## Get only last Page. Where Bills info is at.
-            
-        text=text+pageObj.extractText()
+
+        try:
+            pdfFileObj = open(filepath, 'rb')
+        except OSError:
+            ###
+            # LOG Error opening bill
+            ###
+            sys.exit()
+        with pdfFileObj:
+            pdfReader = PyPDF2.PdfFileReader(pdfFileObj)
+            text=''
+            pageObj = pdfReader.getPage(pdfReader.numPages - 1) ## Get only last Page. Where Bills info is at.
+            text=text+pageObj.extractText()
 
         #Periodo de facturação
 
@@ -118,23 +125,30 @@ class bill_handler():
         lim_date = lim_date[6:] + "-" + lim_date[3:5] + "-" + lim_date[:2]
 
         ### Gather all information
+
         bills = ('EDP',filename[0:12], float(price), per, int(ent), int(ref), lim_date)
 
         return bills
 
-    def agua(self,filepath):
+    def agua(self,filepath): 
         
         filename = os.path.basename(filepath)
-        pdfFileObj = open(filepath, 'rb')
-        pdfReader = PyPDF2.PdfFileReader(pdfFileObj)
-        text=''
-        '''
-        -> Deal with exception of opening the file
-        '''
-        pageObj = pdfReader.getPage(0) ## Get only first Page. Where Bills info is at.
-        text=text+pageObj.extractText()
 
+        try:
+            pdfFileObj = open(filepath, 'rb')
+        except OSError:
+            ###
+            # LOG Error opening bill
+            ###
+            sys.exit()
+        with pdfFileObj:
+            pdfReader = PyPDF2.PdfFileReader(pdfFileObj)
+            text=''
+            pageObj = pdfReader.getPage(0) ## Get only first Page. Where Bills info is at.
+            text=text+pageObj.extractText()
+        
         #Periodo de facturação
+
         per_find ='Resumo de faturação Período Faturação: '
         per_find_ix = text.find(per_find)
         per_find_size = len(per_find)
@@ -143,10 +157,10 @@ class bill_handler():
         per = text[per_ix : per_ix + per_size]
 
         #Entidade
+
         ent_find = 'do Credor (IDC) PT20110442.'
         ent_find_ix = text.find(ent_find) ## tem 24 caracteres
         ent_find_size = len(ent_find)
-
         ent_ix = ent_find_ix + ent_find_size + 1
         ent_size = 5
         ent = text[ent_ix : ent_ix + ent_size]
@@ -169,7 +183,7 @@ class bill_handler():
         lim_dat_find = 'Data limite pagamento'
         lim_dat_find_ix = text.find(lim_dat_find) ## tem 24 caracteres
         lim_dat_find_size = len(lim_dat_find)
-
+        
         lim_dat_ix = lim_dat_find_ix + lim_dat_find_size + 1
         lim_dat_size = 11
         lim_date = text[lim_dat_ix : lim_dat_ix + lim_dat_size].replace(" ","-")
@@ -179,24 +193,32 @@ class bill_handler():
             if key in lim_date:
                 val =(convert.get(key))
                 break
-        
+            else:
+                val = "00"
+
         lim_date = lim_date.replace(key,val)
         lim_date = lim_date[6:] + "-" + lim_date[3:5] + "-" + lim_date[:2]
         
         ### Gather all information
+
         bills = ('Agua',filename[0:19], float(price), per, int(ent), int(ref), lim_date)
 
         return bills
 
     def store_bill(self,tipo,filepath):
-        
-        mydb = mysql.connector.connect(
-        host="127.0.0.1",
-        user="root",
-        password="root",
-        database="bills"
-        )
-        ### -> Exception For sql connection
+        ### DB connection
+        try:
+            mydb = mysql.connector.connect(
+                host="127.0.0.1",
+                user="root",
+                password="root",
+                database="bills"
+                )
+
+        except mysql.connector.Error as err:
+            print("Something went wrong: {}".format(err))
+        ###
+
         if tipo == 'EDP':
             record = self.edp(filepath)
         elif tipo == 'agua':
@@ -209,11 +231,24 @@ class bill_handler():
         
         #### Create query to check for duplicates in DB
         check_fatura_q = """Select COUNT(*) from bills where id_fatura = '%s'""" %(record[1])
-        mycursor.execute(check_fatura_q)
-        fatura_entrys = int(mycursor.fetchone()[0])
-
+        try:
+            mycursor.execute(check_fatura_q)
+            fatura_entrys = int(mycursor.fetchone()[0])
+        except:
+            ###
+            # Log Error
+            ###
+            pass
+        
         if fatura_entrys < 1: ## 
-            mycursor.execute(query,record)
+            try:
+                mycursor.execute(query,record)
+            except:
+                ###
+                # Log error
+                ###
+                pass
+
             ###
             # Storing values to DB (log all values)
             ###
@@ -222,7 +257,10 @@ class bill_handler():
             ###
             # Log BIll already in DB
             ###
+
+        
         mydb.commit()
+        mycursor.close()
 
     def __init__(self, tipo, filepath):
         
@@ -233,10 +271,11 @@ if __name__ == "__main__":
     event_handler=MonitorFolder()
     observer = Observer()
     observer.schedule(event_handler, path=src_path, recursive=True)
+    observer.start()
     #####
 # Log Monitoring Started
     #####
-    observer.start()
+
     try:
         while(True):
            time.sleep(1)
