@@ -1,4 +1,5 @@
 
+from asyncio.windows_events import NULL
 import PyPDF2
 import mysql.connector
 import os
@@ -8,7 +9,8 @@ import time
 from watchdog.observers import Observer
 from watchdog.events import FileSystemEventHandler
 import logging
- 
+import datetime
+
 logging.basicConfig(filename='log.log',
                     filemode='a',
                     format='%(asctime)s,%(msecs)d %(name)s %(levelname)s %(message)s',
@@ -63,6 +65,26 @@ class MonitorFolder(FileSystemEventHandler):
         else: pass
 
 class bill_handler():
+    def edp_bill_month(self,per):
+        convert ={"janeiro":"01","fevereiro":"02","março":"03","abril":"04","maio":"05","junho":"06","julho":"07","agosto":"08","setembro":"09","outubro":"10","novembro":"11","dezembro":"12"}
+        per = per.replace("a ","")
+
+        for key in convert:
+                if key in per:
+                    val =(convert.get(key))
+                    per = per.replace(key,val)
+
+        nd = per[11:]
+        month = nd[3:5] + "/" + nd[-2:] 
+
+        return month
+
+    def agua_bill_month(self,per):
+        per = per.replace("~ ","")
+        nd = per[11:]
+        month = nd[5:7] + "/" + nd[2:4] 
+
+        return month 
 
     def edp(self,filepath):
 
@@ -90,6 +112,7 @@ class bill_handler():
         per_y2_ix = text[per_ix + per_y1_ix +1 :].find('202')
         per_size = per_y1_ix + per_y2_ix + 5
         per = text[per_ix : per_ix + per_size]
+        per = self.edp_bill_month(per)
 
         #Entidade
 
@@ -122,8 +145,10 @@ class bill_handler():
 
         ### Gather all information
 
-        bills = ('EDP',filename[0:12], float(price), per, int(ent), int(ref), lim_date)
-
+        try:
+            bills = ('EDP',filename[0:12], float(price), str(per), int(ent), int(ref), lim_date)
+        except:
+            bills = NULL
         return bills
 
     def agua(self,filepath): 
@@ -149,7 +174,8 @@ class bill_handler():
         per_ix = per_find_ix + per_find_size
         per_size = 23
         per = text[per_ix : per_ix + per_size]
-
+        per = self.agua_bill_month(per)
+        
         #Entidade
 
         ent_find = 'do Credor (IDC) PT20110442.'
@@ -158,14 +184,14 @@ class bill_handler():
         ent_ix = ent_find_ix + ent_find_size + 1
         ent_size = 5
         ent = text[ent_ix : ent_ix + ent_size]
-
+        
         # Valor a Pagar
 
         price_ix = ent_ix + ent_size + 1
         euro_ix = text[price_ix:].find('€')
         price_size = euro_ix
         price = text[price_ix : price_ix + price_size].replace(",",".")
-
+        
         # Referência
 
         ref_ix = price_ix + price_size + 1
@@ -194,8 +220,10 @@ class bill_handler():
         lim_date = lim_date[6:] + "-" + lim_date[3:5] + "-" + lim_date[:2]
         
         ### Gather all information
-
-        bills = ('Agua',filename[0:19], float(price), per, int(ent), int(ref), lim_date)
+        try: 
+            bills = ('Agua',filename[0:19], float(price), per, int(ent), int(ref), lim_date)
+        except:
+            bills = NULL
 
         return bills
 
@@ -217,34 +245,39 @@ class bill_handler():
             record = self.edp(filepath)
         elif tipo == 'agua':
             record = self.agua(filepath)
-        else: record = 0
+        else: record = NULL
 
-        #### Create query to insert bill into DB
-        mycursor = mydb.cursor()
-        query = "INSERT INTO bills (tipo,id_fatura,price,periodo_fatura,entidade,referencia,data_limite ) VALUES (%s,%s,%s,%s,%s,%s,%s)"
-        
-        #### Create query to check for duplicates in DB
-        check_fatura_q = """Select COUNT(*) from bills where id_fatura = '%s'""" %(record[1])
-        try:
-            mycursor.execute(check_fatura_q)
-            fatura_entrys = int(mycursor.fetchone()[0])
-        except:
-            logging.error('Error on check fatura query')
+        if record == NULL:
+            logging.error('Error populating record variable')
             pass
-        
-        if fatura_entrys < 1: ## 
-            try:
-                mycursor.execute(query,record)
-            except:
-                logging.error('Error on fatura query')
-                pass
-            logging.info('Bill stored %s', record)
 
         else:
-            logging.warning('Already a bill with this id.')
+            #### Create query to insert bill into DB
+            mycursor = mydb.cursor()
+            query = "INSERT INTO bills (tipo,id_fatura,price,periodo_fatura,entidade,referencia,data_limite ) VALUES (%s,%s,%s,%s,%s,%s,%s)"
+            
+            #### Create query to check for duplicates in DB
+            check_fatura_q = """Select COUNT(*) from bills where id_fatura = '%s'""" %(record[1])
+            try:
+                mycursor.execute(check_fatura_q)
+                fatura_entrys = int(mycursor.fetchone()[0])
+            except:
+                logging.error('Error on check fatura query')
+                pass
+            
+            if fatura_entrys < 1: ## 
+                try:
+                    mycursor.execute(query,record)
+                except:
+                    logging.error('Error on fatura query')
+                    pass
+                logging.info('Bill stored %s', record)
 
-        mydb.commit()
-        mycursor.close()
+            else:
+                logging.warning('Already a bill with this id.')
+
+            mydb.commit()
+            mycursor.close()
 
     def __init__(self, tipo, filepath):
         
