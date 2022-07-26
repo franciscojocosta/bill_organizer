@@ -1,21 +1,21 @@
 
 from asyncio.windows_events import NULL
+from pickle import TRUE
 import PyPDF2
 import mysql.connector
 import os
 import sys
-from pickle import TRUE
 import time
 from watchdog.observers import Observer
 from watchdog.events import FileSystemEventHandler
 import logging
-import datetime
 
 logging.basicConfig(filename='log.log',
                     filemode='a',
                     format='%(asctime)s,%(msecs)d %(name)s %(levelname)s %(message)s',
                     datefmt='%H:%M:%S',
-                    level=logging.DEBUG)
+                    level=logging.WARNING)
+
 
 record = (0,0) ## Variable to store bill data
 src_path = 'C:\\Users\\franc\\Downloads'  #### Path to check for bills
@@ -25,7 +25,7 @@ class MonitorFolder(FileSystemEventHandler):
     filename_aux = ""
 
     def edpmatch(self,filename):
-        ### EDP bill names has 12 integers at the begging
+        ### EDP bill names has 12 integers at the beggining
         if len(filename) < 12:  
             return False
 
@@ -239,7 +239,6 @@ class bill_handler():
 
         except mysql.connector.Error as err:
             logging.error('Cant connect to DB : %s', err)
-        ###
 
         if tipo == 'EDP':
             record = self.edp(filepath)
